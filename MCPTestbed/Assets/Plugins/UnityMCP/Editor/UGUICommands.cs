@@ -10,6 +10,7 @@ namespace UnityMCP
 {
     public static class UGUICommands
     {
+        private const string VERSION = "1.5.0"; // Fixed ParseArgs comma handling
         private static Dictionary<string, GameObject> _loadedPrefabs = new Dictionary<string, GameObject>();
 
         public static string Execute(string command, string argsJson)
@@ -18,6 +19,8 @@ namespace UnityMCP
 
             switch (command)
             {
+                case "get_version":
+                    return $"{{\"version\":\"{VERSION}\"}}";
                 case "create_ui_prefab":
                     return CreateUIPrefab(args);
                 case "add_ui_element":
@@ -48,16 +51,39 @@ namespace UnityMCP
         private static Dictionary<string, string> ParseArgs(string json)
         {
             var result = new Dictionary<string, string>();
-            // Simple JSON parsing for flat objects
+            // Better JSON parsing that handles commas inside values
             json = json.Trim().TrimStart('{').TrimEnd('}');
-            var pairs = json.Split(',');
+            
+            // Split by comma only when not inside quotes
+            var pairs = new List<string>();
+            int start = 0;
+            bool inQuotes = false;
+            for (int i = 0; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (c == '"' && (i == 0 || json[i - 1] != '\\'))
+                {
+                    inQuotes = !inQuotes;
+                }
+                else if (c == ',' && !inQuotes)
+                {
+                    pairs.Add(json.Substring(start, i - start));
+                    start = i + 1;
+                }
+            }
+            if (start < json.Length)
+            {
+                pairs.Add(json.Substring(start));
+            }
+
             foreach (var pair in pairs)
             {
-                var kv = pair.Split(new[] { ':' }, 2);
-                if (kv.Length == 2)
+                // Split on first colon only
+                int colonIndex = pair.IndexOf(':');
+                if (colonIndex > 0)
                 {
-                    var key = kv[0].Trim().Trim('"');
-                    var value = kv[1].Trim().Trim('"');
+                    var key = pair.Substring(0, colonIndex).Trim().Trim('"');
+                    var value = pair.Substring(colonIndex + 1).Trim().Trim('"');
                     result[key] = value;
                 }
             }
@@ -70,13 +96,28 @@ namespace UnityMCP
         {
             string name = args.GetValueOrDefault("name", "NewUI");
             string path = args.GetValueOrDefault("path", "Assets/UI");
+            bool withCanvas = args.GetValueOrDefault("with_canvas", "true").ToLower() == "true";
 
-            // Create Canvas GameObject
-            var canvasGO = new GameObject(name);
-            var canvas = canvasGO.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvasGO.AddComponent<CanvasScaler>();
-            canvasGO.AddComponent<GraphicRaycaster>();
+            // Create root GameObject
+            var rootGO = new GameObject(name);
+            var rectTransform = rootGO.AddComponent<RectTransform>();
+            
+            if (withCanvas)
+            {
+                // Add Canvas components for standalone UI
+                var canvas = rootGO.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                rootGO.AddComponent<CanvasScaler>();
+                rootGO.AddComponent<GraphicRaycaster>();
+            }
+            else
+            {
+                // Set up RectTransform to fill parent (for child UI elements)
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+                rectTransform.offsetMin = Vector2.zero;
+                rectTransform.offsetMax = Vector2.zero;
+            }
 
             // Ensure directory exists
             if (!AssetDatabase.IsValidFolder(path))
@@ -86,8 +127,8 @@ namespace UnityMCP
 
             // Save as prefab
             string prefabPath = $"{path}/{name}.prefab";
-            var prefab = PrefabUtility.SaveAsPrefabAsset(canvasGO, prefabPath);
-            UnityEngine.Object.DestroyImmediate(canvasGO);
+            var prefab = PrefabUtility.SaveAsPrefabAsset(rootGO, prefabPath);
+            UnityEngine.Object.DestroyImmediate(rootGO);
 
             // Load and cache the prefab instance
             var instance = PrefabUtility.LoadPrefabContents(prefabPath);
@@ -181,21 +222,7 @@ namespace UnityMCP
             var rect = element.GetComponent<RectTransform>();
             if (rect == null) return "{\"error\":\"RectTransform not found\"}";
 
-            // Position
-            if (args.TryGetValue("position", out string posStr))
-            {
-                var pos = ParseVector2(posStr);
-                rect.anchoredPosition = pos;
-            }
-
-            // Size
-            if (args.TryGetValue("size", out string sizeStr))
-            {
-                var size = ParseVector2(sizeStr);
-                rect.sizeDelta = size;
-            }
-
-            // Anchors preset
+            // Apply anchors FIRST (this changes how size/position work)
             if (args.TryGetValue("anchors", out string anchorsStr))
             {
                 ApplyAnchorPreset(rect, anchorsStr);
@@ -207,7 +234,24 @@ namespace UnityMCP
                 rect.pivot = ParseVector2(pivotStr);
             }
 
-            return "{\"success\":true}";
+            // Size (must be after anchors for sizeDelta to work correctly)
+            string sizeDebug = "not provided";
+            if (args.TryGetValue("size", out string sizeStr))
+            {
+                var size = ParseVector2(sizeStr);
+                rect.sizeDelta = size;
+                sizeDebug = $"raw='{sizeStr}' parsed=({size.x},{size.y})";
+            }
+
+            // Position (must be after anchors)
+            if (args.TryGetValue("position", out string posStr))
+            {
+                var pos = ParseVector2(posStr);
+                rect.anchoredPosition = pos;
+            }
+
+            // Return debug info
+            return $"{{\"success\":true,\"debug\":{{\"sizeInput\":\"{sizeDebug}\",\"sizeDelta\":\"({rect.sizeDelta.x}, {rect.sizeDelta.y})\",\"anchoredPosition\":\"({rect.anchoredPosition.x}, {rect.anchoredPosition.y})\",\"anchors\":\"({rect.anchorMin.x},{rect.anchorMin.y})-({rect.anchorMax.x},{rect.anchorMax.y})\"}}}}";
         }
 
         private static string SetUIProperty(Dictionary<string, string> args)
@@ -360,10 +404,10 @@ namespace UnityMCP
                     }
                     else
                     {
-                        // Try common UI types
-                        var uiComp = target.GetComponent<Graphic>() ??
-                                     target.GetComponent<Button>() as Component ??
+                        // Try common UI types - Button must be checked before Graphic!
+                        var uiComp = target.GetComponent<Button>() as Component ??
                                      target.GetComponent<Text>() as Component ??
+                                     target.GetComponent<Graphic>() ??
                                      target.gameObject as UnityEngine.Object;
                         prop.objectReferenceValue = uiComp;
                     }
@@ -503,6 +547,9 @@ namespace UnityMCP
 
         private static void ApplyAnchorPreset(RectTransform rect, string preset)
         {
+            // For non-stretch presets, reset position so size works correctly
+            bool isStretch = preset.ToLower() == "stretchall" || preset.ToLower() == "stretch";
+            
             switch (preset.ToLower())
             {
                 case "topleft":
@@ -560,6 +607,12 @@ namespace UnityMCP
                     rect.offsetMin = Vector2.zero;
                     rect.offsetMax = Vector2.zero;
                     break;
+            }
+            
+            // Reset position for non-stretch presets so sizeDelta works correctly
+            if (!isStretch)
+            {
+                rect.anchoredPosition = Vector2.zero;
             }
         }
 

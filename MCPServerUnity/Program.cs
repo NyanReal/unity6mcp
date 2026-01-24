@@ -58,13 +58,16 @@ public static class UnityUGUITools
     [McpServerTool, Description("Create a new Canvas-based UI prefab")]
     public static async Task<string> create_ui_prefab(
         [Description("Prefab name")] string name,
-        [Description("Asset path (e.g., Assets/UI)")] string path = "Assets/UI")
+        [Description("Asset path (e.g., Assets/UI)")] string path = "Assets/UI",
+        [Description("Include Canvas components (false for child UI elements)")] bool with_canvas = true)
     {
-        return await CallUnity("create_ui_prefab", new Dictionary<string, string>
+        var args = new Dictionary<string, string>
         {
             ["name"] = name,
-            ["path"] = path
-        });
+            ["path"] = path,
+            ["with_canvas"] = with_canvas.ToString().ToLower()
+        };
+        return await CallUnity("create_ui_prefab", args);
     }
 
     [McpServerTool, Description("Add a UI element (Panel, Button, Text, Image, RawImage, ScrollView, InputField) to prefab")]
