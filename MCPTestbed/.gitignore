@@ -1,0 +1,117 @@
+# Unity 6 generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Asset meta data should only be ignored when the corresponding asset is also ignored
+!/[Aa]ssets/**/*.meta
+
+# Never ignore Asset folder itself
+!/[Aa]ssets/
+
+# Ignore all Assets inside the Plugins folder (if you use Asset Store plugins)
+# Uncomment the line below if you want to ignore plugins
+# /[Aa]ssets/Plugins/
+
+# Unity3D generated meta files
+*.pidb
+*.unityproj
+*.dll.mdb
+*.pdb
+
+# Unity3D generated file on crash reports
+sysinfo.txt
+
+# Builds
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# Crashlytics generated file
+crashlytics-build.properties
+
+# Packed Addressables
+/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+
+# TextMeshPro
+[Aa]ssets/[Tt]ext[Mm]esh [Pp]ro/
+
+# Visual Studio cache directory
+.vs/
+
+# Rider cache directory
+.idea/
+
+# Visual Studio local settings
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# MonoDevelop local settings
+*.userprefs
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+
+# Rider
+.idea/
+
+# Code Coverage
+[Cc]ode[Cc]overage/
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Plastic SCM
+*.ignore
+*.plastic
+
+# Gradle (Android)
+.gradle/
+local.properties
+*.iml
+
+# Test results
+TestResults/
+
+# GPU Instancer
+GPUInstancer/
+
+# Burst
+BurstDebugInformation_*/
