@@ -10,7 +10,7 @@ namespace UnityMCP
 {
     public static class UGUICommands
     {
-        private const string VERSION = "1.5.0"; // Fixed ParseArgs comma handling
+        private const string VERSION = "1.7.0"; // Fixed sprite loading
         private static Dictionary<string, GameObject> _loadedPrefabs = new Dictionary<string, GameObject>();
 
         public static string Execute(string command, string argsJson)
@@ -43,6 +43,8 @@ namespace UnityMCP
                     return SetComponentProperty(args);
                 case "list_components":
                     return ListComponents(args);
+                case "set_texture_import":
+                    return SetTextureImport(args);
                 default:
                     return $"{{\"error\":\"Unknown command: {command}\"}}";
             }
@@ -285,8 +287,19 @@ namespace UnityMCP
                     var img = element.GetComponent<Image>();
                     if (img != null)
                     {
-                        var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(value);
+                        // Load all assets at path and find the Sprite (sub-asset of texture)
+                        var assets = AssetDatabase.LoadAllAssetsAtPath(value);
+                        Sprite sprite = null;
+                        foreach (var asset in assets)
+                        {
+                            if (asset is Sprite s)
+                            {
+                                sprite = s;
+                                break;
+                            }
+                        }
                         if (sprite != null) img.sprite = sprite;
+                        else return $"{{\"error\":\"Sprite not found at '{value}'. Make sure texture type is Sprite.\"}}";
                     }
                     break;
                 case "enabled":
@@ -469,6 +482,47 @@ namespace UnityMCP
             var names = components.Select(c => c.GetType().Name).ToArray();
 
             return $"{{\"components\":[{string.Join(",", names.Select(n => $"\"{n}\""))}]}}";
+        }
+
+        private static string SetTextureImport(Dictionary<string, string> args)
+        {
+            string texturePath = args.GetValueOrDefault("path", "");
+            string border = args.GetValueOrDefault("border", ""); // "(left, bottom, right, top)"
+            
+            var importer = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+            if (importer == null) return $"{{\"error\":\"Texture not found at '{texturePath}'\"}}";
+
+            // Set as Sprite
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            
+            // Set border for 9-slice if provided
+            if (!string.IsNullOrEmpty(border))
+            {
+                var borderVec = ParseVector4(border);
+                importer.spriteBorder = borderVec;
+            }
+
+            // Apply and reimport
+            EditorUtility.SetDirty(importer);
+            importer.SaveAndReimport();
+
+            return $"{{\"success\":true,\"textureType\":\"Sprite\",\"border\":\"({importer.spriteBorder.x},{importer.spriteBorder.y},{importer.spriteBorder.z},{importer.spriteBorder.w})\"}}";
+        }
+
+        private static Vector4 ParseVector4(string s)
+        {
+            s = s.Trim('(', ')', '[', ']');
+            var parts = s.Split(',');
+            if (parts.Length >= 4)
+            {
+                float.TryParse(parts[0].Trim(), out float x);
+                float.TryParse(parts[1].Trim(), out float y);
+                float.TryParse(parts[2].Trim(), out float z);
+                float.TryParse(parts[3].Trim(), out float w);
+                return new Vector4(x, y, z, w);
+            }
+            return Vector4.zero;
         }
 
         // ===== Helper Methods =====
